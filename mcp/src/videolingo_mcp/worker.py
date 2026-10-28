@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import fcntl
 import os
 from pathlib import Path
@@ -48,28 +49,62 @@ def execute(root: Path, job_id: str, run_id: str) -> None:
     write_json(directory / f"result-{run_id}.json", result)
 
 
+def _signal_group(child: subprocess.Popen, signum: int) -> bool:
+    settle_until = time.monotonic() + 0.5
+    while True:
+        try:
+            os.killpg(child.pid, signum)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError as error:
+            # Darwin reports EPERM for zombies and during the exit transition.
+            # Allow that transition to settle; never assume that a live leader
+            # or descendant has exited merely because a signal was rejected.
+            if error.errno != errno.EPERM or sys.platform != "darwin":
+                raise
+            if child.poll() is None:
+                if time.monotonic() < settle_until:
+                    time.sleep(0.02)
+                    continue
+                error.add_note("The process group leader has not yet exited.")
+                raise
+            try:
+                result = subprocess.run(
+                    ["/bin/ps", "-axo", "pgid=,stat="], check=True,
+                    capture_output=True, text=True, timeout=5,
+                )
+                rows = [line.split() for line in result.stdout.splitlines() if line.strip()]
+                if not rows or any(len(row) != 2 for row in rows):
+                    raise ValueError("Unable to verify process group members")
+                members = [(int(group), state) for group, state in rows]
+            except (OSError, subprocess.SubprocessError, ValueError) as observation_error:
+                error.add_note(f"Cannot verify process group members: {type(observation_error).__name__}")
+                raise error
+            if any(group == child.pid and not state.startswith("Z") for group, state in members):
+                if time.monotonic() < settle_until:
+                    time.sleep(0.02)
+                    continue
+                error.add_note("The process group still has live members.")
+                raise error
+            return False
+
+
 def stop_child(child: subprocess.Popen) -> None:
     # The leader may exit on SIGTERM while a descendant ignores it. Keep the
     # process group identity until every member has been signalled, not just the
     # Popen leader; this function is only used for a group we launched ourselves.
-    try:
-        os.killpg(child.pid, signal.SIGTERM)
-    except ProcessLookupError:
+    if not _signal_group(child, signal.SIGTERM):
         child.wait()
         return
     deadline = time.monotonic() + 3
     while time.monotonic() < deadline:
         child.poll()
-        try:
-            os.killpg(child.pid, 0)
-        except ProcessLookupError:
+        if not _signal_group(child, 0):
             child.wait()
             return
         time.sleep(0.05)
-    try:
-        os.killpg(child.pid, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
+    _signal_group(child, signal.SIGKILL)
     child.wait()
 
 
@@ -96,6 +131,10 @@ def supervise(root: Path, job_id: str, run_id: str) -> None:
         with service.locked():
             job = read_json(directory / "job.json")
             if job["run"]["id"] != run_id:
+                return
+            if cancelled.exists() or stopping:
+                job.update(status="cancelled" if cancelled.exists() else "interrupted", error=None)
+                service._save(job)
                 return
             job["status"] = "transcribing" if job["run"]["operation"] == "transcribe" else "exporting"
             service._save(job)
@@ -136,12 +175,22 @@ def supervise(root: Path, job_id: str, run_id: str) -> None:
                         job["status"] = "completed"
                 service._save(job)
         except BaseException as error:
+            cleanup_errors = []
             if child is not None:
-                stop_child(child)
-            clean_temporary_exports(directory)
+                try:
+                    stop_child(child)
+                except Exception as cleanup_error:
+                    cleanup_errors.append(f"Process cleanup: {cleanup_error}")
+            try:
+                clean_temporary_exports(directory)
+            except Exception as cleanup_error:
+                cleanup_errors.append(f"Temporary file cleanup: {cleanup_error}")
             with service.locked():
                 job = read_json(directory / "job.json")
-                job.update(status="failed", error=f"Worker failed: {type(error).__name__}: {error}")
+                detail = f"Worker failed: {type(error).__name__}: {error}"
+                if cleanup_errors:
+                    detail += "; " + "; ".join(cleanup_errors)
+                job.update(status="failed", error=detail)
                 service._save(job)
             raise
 

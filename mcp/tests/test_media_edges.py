@@ -113,17 +113,71 @@ class MediaEdgeTests(unittest.TestCase):
         self.assertEqual(subtitle_stream["disposition"]["default"], 1)
 
     def test_vtt_markup_is_literal_after_video_round_trip(self) -> None:
-        text = '<b>literal</b> & &amp; {\\an8}\\N 🙂'
-        output = self.export([{"id": 1, "start": 0.25, "end": 2.75, "text": text}], format="vtt")
+        text = '<b>literal</b> & &amp; {\\an8}\\N {\\b1}visible{\\b0} C:\\clip 🙂'
+        expected = '<b>literal</b> & &amp; ｛＼an8｝＼N ｛＼b1｝visible｛＼b0｝ C:＼clip 🙂'
+        subtitle = self.directory / "literal 中文 : 'captions.vtt"
+        subtitle.write_text(render_vtt([{"id": 1, "start": 0.25, "end": 2.75, "text": text}]), encoding="utf-8")
+        original = subtitle.read_bytes()
+        # The standalone VTT retains the exact literal ASS punctuation and
+        # standard HTML entities. Only a temporary video-input copy may apply
+        # the documented full-width display punctuation normalization.
+        self.assertIn(b"&lt;b&gt;literal&lt;/b&gt; &amp; &amp;amp;", original)
+        self.assertIn(b"{\\an8}\\N {\\b1}visible{\\b0}", original)
+        self.assertNotIn("｛".encode("utf-8"), original)
+        output = self.directory / "literal.mp4"
+        export_video(self.multi_audio, subtitle, output)
+        self.assertEqual(subtitle.read_bytes(), original, "Video export modified the original standalone VTT")
         content, cues = extract_cues(output)
         (self.directory / "extracted.srt").write_text(content, encoding="utf-8")
         self.assertEqual(len(cues), 1)
-        # FFmpeg places a word joiner after backslashes to preserve literal ASS
-        # punctuation; it has no visible glyph and must not hide the cue text.
-        self.assertEqual(cues[0]["text"].replace("\u2060", "").replace("\\{{}", "{"), text)
+        self.assertEqual(cues[0]["text"], expected)
+        self.assertEqual((cues[0]["start"], cues[0]["end"]), (0.25, 2.75))
         ass = run_tool(["ffmpeg", "-v", "error", "-i", str(output), "-map", "0:s:0", "-f", "ass", "-"])
+        self.assertIn(expected, ass)
         self.assertNotIn("{\\b1}", ass)
+        self.assertNotIn("{\\b0}", ass)
         self.assertNotIn("{\\an8}", ass)
+        self.assertNotIn("\\N", ass, "A literal backslash-N became an ASS line break")
+
+    def test_vtt_burn_in_matches_literal_display_and_keeps_original_file(self) -> None:
+        if not media_capabilities()["burn_in"]:
+            self.skipTest("This host lacks the real subtitles/libass filter; literal VTT burn-in must run on capable CI")
+        text = '<b>QA</b> {\\an8}\\N {\\b1}LITERAL{\\b0}'
+        expected = '<b>QA</b> ｛＼an8｝＼N ｛＼b1｝LITERAL｛＼b0｝'
+        videos = []
+        for name, payload in [("original", text), ("reference", expected)]:
+            subtitle = self.directory / f"{name} 中文 : 'captions.vtt"
+            subtitle.write_text(render_vtt([
+                {"id": 1, "start": 0.5, "end": 2.5, "text": payload},
+            ]), encoding="utf-8")
+            original = subtitle.read_bytes()
+            output = self.directory / f"{name}.mp4"
+            export_video(self.multi_audio, subtitle, output, mode="burn_in")
+            self.assertEqual(subtitle.read_bytes(), original, "Burn-in modified its source VTT")
+            self.assertFalse(any(stream["codec_type"] == "subtitle" for stream in probe(output)["streams"]))
+            videos.append(output)
+
+        def rgb_frame(path: Path, at: float) -> bytes:
+            frame = subprocess.run([
+                "ffmpeg", "-v", "error", "-nostdin", "-ss", str(at), "-i", str(path),
+                "-map", "0:v:0", "-frames:v", "1", "-pix_fmt", "rgb24", "-f", "rawvideo", "-",
+            ], check=True, capture_output=True, timeout=15).stdout
+            self.assertEqual(len(frame), 160 * 90 * 3)
+            return frame
+
+        # A real rendered reference catches deleted brace blocks, accidental
+        # top alignment, bold markup, and a backslash-N treated as a line break.
+        # Merely finding any changed pixels would miss those content losses.
+        for at in [0.1, 1.0, 3.0]:
+            with self.subTest(at=at):
+                self.assertEqual(rgb_frame(videos[0], at), rgb_frame(videos[1], at))
+        source_frame = rgb_frame(self.multi_audio, 1.0)
+        rendered = rgb_frame(videos[0], 1.0)
+        changed_pixels = sum(
+            max(abs(source_frame[index + channel] - rendered[index + channel]) for channel in range(3)) >= 40
+            for index in range(0, len(source_frame), 3)
+        )
+        self.assertGreater(changed_pixels, 20, "The literal reference comparison passed without any visible subtitle")
 
     def test_long_bilingual_payload_keeps_every_character(self) -> None:
         source, translated = "原" * 8000, "译" * 8000

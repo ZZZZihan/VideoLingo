@@ -223,7 +223,19 @@ def export_video(
     with tempfile.TemporaryDirectory(prefix=".videolingo-export-", dir=output_path.parent) as temporary:
         work_dir = Path(temporary)
         local_subtitle = work_dir / f"captions{subtitle_path.suffix.lower()}"
-        shutil.copyfile(subtitle_path, local_subtitle)
+        if subtitle_path.suffix.lower() == ".vtt":
+            # Older FFmpeg versions pass literal WebVTT braces/backslashes
+            # through ASS parsing, dropping text such as {\an8} or turning
+            # \N into a line break. Normalize only the temporary video input;
+            # keep the standalone VTT and its HTML entities unchanged.
+            try:
+                text = subtitle_path.read_text(encoding="utf-8")
+                text = text.translate(str.maketrans({"{": "｛", "}": "｝", "\\": "＼"}))
+                local_subtitle.write_text(text, encoding="utf-8")
+            except (OSError, UnicodeError) as exc:
+                raise MediaError(f"无法准备 UTF-8 VTT 字幕：{exc}") from exc
+        else:
+            shutil.copyfile(subtitle_path, local_subtitle)
         temporary_output = work_dir / "output.mp4"
         command = [ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-n", "-i", str(input_path)]
         if mode == "soft":

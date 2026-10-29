@@ -216,4 +216,6 @@ python -m pytest -q tests/test_video_workflow.py tests/test_workflow_*.py \
   tests/test_processing_policy.py tests/test_source_language.py
 ```
 
-CI 安装带 libass 的 FFmpeg、Noto CJK 字体和 Chromium，运行实际小视频合成及本地页面的浏览器断连/恢复测试。真实网站下载、语音模型推理、供应商 API、账号登录和发布各自需要独立的集成验证，不能用离线测试结果代替。
+CI 安装带 libass 的 FFmpeg、Noto CJK 字体和 Chromium，运行实际小视频合成及本地页面的浏览器断连/恢复测试；浏览器依赖或可执行文件缺失会明确失败。真实网站下载、语音模型推理、供应商 API、账号登录和发布各自需要独立的集成验证，不能用离线测试结果代替。
+
+Linux CI 若由 Chromium 明确报告浏览器沙箱不可用，仅该受控本地文档测试允许用临时启动包装继续；实际发布适配器不改变浏览器沙箱设置。在 Linux 运行发布适配器仍需主机具备可用的 Chromium 沙箱环境。

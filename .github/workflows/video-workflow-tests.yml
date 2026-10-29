@@ -31,6 +31,10 @@ jobs:
     env:
       HF_HUB_OFFLINE: "1"
       TRANSFORMERS_OFFLINE: "1"
+      VIDEOLINGO_TEST_REQUIRE_BROWSER: "1"
+      # A sandbox-unavailable diagnostic may enable a wrapper ONLY inside the
+      # trusted local-document browser test; production launch flags stay intact.
+      VIDEOLINGO_TEST_ALLOW_UNSANDBOXED_CHROMIUM: "1"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -54,7 +58,7 @@ jobs:
         run: python -m playwright install --with-deps chromium
       - name: Test workflow without remote services or model downloads
         run: >-
-          python -m pytest -q tests/test_video_workflow.py tests/test_workflow_*.py
+          python -m pytest -q -rP tests/test_video_workflow.py tests/test_workflow_*.py
           tests/test_processing_policy.py tests/test_source_language.py
       - name: Check existing splitting and translation behavior
         run: >-

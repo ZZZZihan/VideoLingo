@@ -130,6 +130,12 @@ The independent [MCP service](mcp/README.md) lets Codex transcribe local videos 
 
 See the [MCP setup and usage guide](mcp/README.md) for installation, project-level Codex configuration, model downloads, and the complete tool workflow. No separate translation API key is required.
 
+## Subtitle-first workflow with code-controlled stages
+
+For repeatable original-audio bilingual videos, `python workflow.py run SOURCE --job-dir workflow-jobs/VIDEO_ID` prepares source captions, batches translation and semantic review, renders subtitles, verifies the video, and prepares a publication package. General LLM calls are limited to language tasks; source handling, timing, layout checks, checkpoints and rendering are code. Codex CLI is the default language provider; the existing API or external JSON responses are also supported.
+
+See the [Chinese workflow guide](docs/code-first-workflow.zh-CN.md) for setup, recovery and optional, separately invoked Douyin upload. This CLI has isolated job directories and does not use the Streamlit or MCP task state. No upload or publication occurs as part of `run`.
+
 ## LLM, ASR and TTS providers
 VideoLingo supports OpenAI-Like API format and various TTS interfaces:
 - LLM: choose an OpenAI-compatible Chat Completions provider and model that can return the structured JSON required by the workflow. [OpenLux](https://www.openlux.ai/register?aff=wKYu) is recommended; set the API URL to `https://api.openlux.ai/v1`. Prefer GPT-6 Luna with model ID `gpt-6-luna` for best value, GPT-6 Sol with `gpt-6-sol` for better quality, or Claude Opus 5.5 with `claude-opus-5-5` for best quality. OpenLux relay rates are in the install docs. Configure the API URL, key and model in the sidebar.

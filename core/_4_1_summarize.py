@@ -3,6 +3,7 @@ from core.prompts import get_summary_prompt
 import pandas as pd
 from core.utils import *
 from core.utils.models import _3_2_SPLIT_BY_MEANING, _4_1_TERMINOLOGY
+from core.processing_policy import enabled
 
 CUSTOM_TERMS_PATH = 'custom_terms.xlsx'
 
@@ -33,7 +34,6 @@ def search_things_to_note_in_prompt(sentence):
 # Kept on a retry, so that the edits of `pause_before_translate` are not overwritten
 @check_file_exists(_4_1_TERMINOLOGY)
 def get_summary():
-    src_content = combine_chunks()
     custom_terms = pd.read_excel(CUSTOM_TERMS_PATH)
     custom_terms_json = {
         "terms": 
@@ -49,6 +49,11 @@ def get_summary():
     if len(custom_terms) > 0:
         rprint(f"📖 Custom Terms Loaded: {len(custom_terms)} terms")
         rprint("📝 Terms Content:", json.dumps(custom_terms_json, indent=2, ensure_ascii=False))
+    if not enabled('auto_summary', True):
+        with open(_4_1_TERMINOLOGY, 'w', encoding='utf-8') as f:
+            json.dump({'theme': None, **custom_terms_json}, f, ensure_ascii=False, indent=4)
+        return
+    src_content = combine_chunks()
     summary_prompt = get_summary_prompt(src_content, custom_terms_json)
     rprint("📝 Summarizing and extracting terminology ...")
     

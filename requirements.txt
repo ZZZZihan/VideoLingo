@@ -9,6 +9,7 @@ openai>=1.109.1,<4
 opencv-python>=4.11,<6
 openpyxl>=3.1.5,<4
 pandas>=2.2.3,<4
+Pillow>=11,<14
 pydub>=0.25.1,<0.26
 # Setup fetches the platform's FFmpeg + ffprobe automatically; no system install.
 static-ffmpeg==3.0

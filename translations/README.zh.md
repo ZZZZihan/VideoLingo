@@ -126,6 +126,12 @@ uv run start.py --api
 输入文件、启动处理、查询进度、下载结果、失败重试和串行批量处理，参见 **[HTTP API 使用文档](../docs/api.md)**。
 启动后也可打开 [交互式接口文档](http://localhost:8000/docs)。
 
+## 字幕优先的固定流程
+
+使用 `python workflow.py run 视频来源 --job-dir workflow-jobs/任务名`，可以按固定步骤完成原文字幕导入、分批翻译、语义审校、中英字幕视频合成、全片解码检查及发布包准备。代码负责时间轴、版式检查、批次缓存和中断恢复；通用 LLM 只参与语言处理。默认使用本机 Codex CLI，也支持已有 VideoLingo API 配置及当前聊天生成的 JSON 响应。
+
+安装、三种语言调用方式、恢复命令和可选抖音上传，参见 **[字幕优先流程使用说明](../docs/code-first-workflow.zh-CN.md)**。新流程使用独立任务目录；`run` 完成本地处理，上传和提交分别通过发布命令显式执行。
+
 ## LLM、语音识别与配音服务
 本项目支持 OpenAI-Like 格式的 api 和多种配音接口：
 - LLM：自行选择兼容 OpenAI Chat Completions、能够返回流程所需结构化 JSON 的服务和模型。推荐 [OpenLux](https://www.openlux.ai/register?aff=wKYu) 中转，API 地址填 `https://api.openlux.ai/v1`。默认性价比高用 GPT-6 Luna，模型 ID 填 `gpt-6-luna`；质量更好用 GPT-6 Sol，模型 ID 填 `gpt-6-sol`；质量最好用 Claude Opus 5.5，模型 ID 填 `claude-opus-5-5`。OpenLux 中转约价见安装文档。在侧栏配置 API 地址、密钥和模型。

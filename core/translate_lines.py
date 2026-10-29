@@ -5,6 +5,7 @@ from rich.table import Table
 from rich import box
 from core.task_runner import StopTask
 from core.utils import *
+from core.processing_policy import enabled, mode as processing_mode
 console = Console()
 
 def valid_translate_result(result: dict, required_keys: list, required_sub_keys: list):
@@ -51,7 +52,7 @@ def translate_lines(lines, previous_content_prompt, after_cotent_prompt, things_
         faith_result[i]["direct"] = faith_result[i]["direct"].replace('\n', ' ')
 
     # If reflect_translate is False or not set, use faithful translation directly
-    reflect_translate = load_key('reflect_translate')
+    reflect_translate = enabled('polish', load_key('reflect_translate'))
     if not reflect_translate:
         # If reflect_translate is False or not set, use faithful translation directly
         translate_result = "\n".join([faith_result[i]["direct"].strip() for i in faith_result])
@@ -74,6 +75,8 @@ def translate_lines(lines, previous_content_prompt, after_cotent_prompt, things_
     except StopTask:
         raise
     except Exception as e:
+        if processing_mode() == 'code_first':
+            raise
         # The polish step is optional: keep the faithful translation instead of stopping the video
         console.print(f'[yellow]⚠️ Expressiveness translation of block {index} failed ({e}), using the direct translation[/yellow]')
         express_result = {key: {"free": faith_result[key]["direct"]} for key in faith_result}

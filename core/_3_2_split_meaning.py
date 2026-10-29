@@ -9,6 +9,7 @@ from core.utils import *
 from rich.console import Console
 from rich.table import Table
 from core.utils.models import _3_1_SPLIT_BY_NLP, _3_2_SPLIT_BY_MEANING
+from core.processing_policy import mode as processing_mode
 console = Console()
 
 def tokenize_sentence(sentence, nlp):
@@ -88,6 +89,8 @@ def split_sentence(sentence, num_parts, word_limit=20, index=-1, retry_attempt=0
     except StopTask:
         raise
     except Exception as e:
+        if processing_mode() == 'code_first':
+            raise
         # One sentence the model cannot split should not stop the whole video
         console.print(f"[yellow]⚠️ LLM split failed ({e}), splitting mechanically: {sentence}[/yellow]")
         return mechanical_split(sentence, num_parts)
@@ -113,6 +116,20 @@ def split_sentence(sentence, num_parts, word_limit=20, index=-1, retry_attempt=0
     
     return best_split
 
+def _safe_rule_split(sentence, parts, max_length, nlp):
+    if len(parts) < 2 or re.sub(r'\s+', '', ''.join(parts)) != re.sub(r'\s+', '', sentence):
+        return False
+    if get_joiner(get_source_language()) == ' ':
+        cursor = 0
+        for part in parts[:-1]:
+            start = sentence.find(part, cursor)
+            end = start + len(part)
+            if start < 0 or (end < len(sentence) and not sentence[end].isspace()):
+                return False
+            cursor = end
+    return all(len(tokenize_sentence(part, nlp)) <= max_length for part in parts)
+
+
 def parallel_split_sentences(sentences, max_length, max_workers, nlp, retry_attempt=0):
     """Split sentences in parallel using a thread pool."""
     new_sentences = [None] * len(sentences)
@@ -125,6 +142,11 @@ def parallel_split_sentences(sentences, max_length, max_workers, nlp, retry_atte
             # print("Tokenization result:", tokens)
             num_parts = math.ceil(len(tokens) / max_length)
             if len(tokens) > max_length:
+                if processing_mode() == 'code_first':
+                    candidate = mechanical_split(sentence, num_parts).split('\n')
+                    if _safe_rule_split(sentence, candidate, max_length, nlp):
+                        new_sentences[index] = candidate
+                        continue
                 future = executor.submit(split_sentence, sentence, num_parts, max_length, index=index, retry_attempt=retry_attempt)
                 futures.append((future, index, num_parts, sentence))
             else:
@@ -134,6 +156,8 @@ def parallel_split_sentences(sentences, max_length, max_workers, nlp, retry_atte
             split_result = future.result()
             if split_result:
                 split_lines = split_result.strip().split('\n')
+                if processing_mode() == 'code_first' and not _safe_rule_split(sentence, [line.strip() for line in split_lines], max_length, nlp):
+                    raise ValueError(f'Cannot safely split sentence within {max_length} tokens: {sentence}')
                 new_sentences[index] = [line.strip() for line in split_lines]
             else:
                 new_sentences[index] = [sentence]

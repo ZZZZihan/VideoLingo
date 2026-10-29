@@ -177,3 +177,6 @@ videolingo_*.log
 
 # Local Codex MCP launch paths
 /.codex/config.toml
+
+# Isolated fixed-workflow jobs contain user media and local checkpoints.
+/workflow-jobs/

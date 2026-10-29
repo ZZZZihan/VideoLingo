@@ -1,0 +1,8 @@
+# Minimal subtitle-first CLI. Local ASR uses the full application's environment.
+Pillow>=11,<14
+yt-dlp>=2026.6.9
+# Only the api provider needs these; it reuses VideoLingo's API configuration.
+openai>=1.109.1,<4
+ruamel.yaml>=0.19.1,<0.20
+json-repair>=0.58.6,<1
+rich>=13,<16

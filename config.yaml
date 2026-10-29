@@ -94,6 +94,14 @@ subtitle:
 # *Summary length, set low to 2k if using local LLM
 summary_length: 8000
 
+# Existing pipelines keep legacy behavior by default. Opt into code_first to
+# prefer rule-based splitting and control optional language-model steps.
+processing_policy:
+  mode: 'legacy' # legacy | code_first
+  auto_summary: false
+  polish: false
+  trim_for_dubbing: false
+
 # *Maximum number of words for the first rough cut, below 18 will cut too finely affecting translation, above 22 is too long and will make subsequent subtitle splitting difficult to align
 max_split_length: 20
 

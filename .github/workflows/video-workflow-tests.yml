@@ -1,0 +1,66 @@
+name: Video workflow tests
+
+on:
+  pull_request:
+    paths:
+      - "core/**"
+      - "workflow.py"
+      - "tests/**"
+      - "requirements*.txt"
+      - "config.yaml"
+      - "runtime_libraries.py"
+      - ".github/workflows/video-workflow-tests.yml"
+  push:
+    branches: [main]
+    paths:
+      - "core/**"
+      - "workflow.py"
+      - "tests/**"
+      - "requirements*.txt"
+      - "config.yaml"
+      - "runtime_libraries.py"
+      - ".github/workflows/video-workflow-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  subtitle-workflow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      VIDEOLINGO_TEST_REQUIRE_BROWSER: "1"
+      # A sandbox-unavailable diagnostic may enable a wrapper ONLY inside the
+      # trusted local-document browser test; production launch flags stay intact.
+      VIDEOLINGO_TEST_ALLOW_UNSANDBOXED_CHROMIUM: "1"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-workflow.txt
+      - name: Install FFmpeg and Chinese font
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg fonts-noto-cjk
+      - name: Install lightweight test environment
+        run: >-
+          python -m pip install -r requirements-workflow.txt
+          'pytest>=8,<10' 'PyYAML>=6,<7' 'pandas>=2.2,<4' 'openpyxl>=3.1,<4'
+          'spacy>=3.8.7,<3.9' 'syllables>=1.1.5,<2' 'pypinyin>=0.55,<1'
+          'pydub>=0.25.1,<0.26' 'requests>=2.32.5,<3' 'playwright>=1.58,<2'
+      - name: Install Chromium for local browser recovery test
+        run: python -m playwright install --with-deps chromium
+      - name: Test workflow without remote services or model downloads
+        run: >-
+          python -m pytest -q -rP tests/test_video_workflow.py tests/test_workflow_*.py
+          tests/test_processing_policy.py tests/test_source_language.py
+      - name: Check existing splitting and translation behavior
+        run: >-
+          python -m pytest -q tests/test_backlog_fixes.py
+          -k 'pick_split or split_sentence or split_falls_back or split_does_not_swallow or translation_ignores or failed_polish or failed_faithful'

@@ -105,7 +105,13 @@ def probe_media(path: Path) -> dict:
 def _ffmpeg_features(path: str) -> tuple[set[str], set[str]]:
     filters = _run([path, "-hide_banner", "-filters"], timeout=20)
     encoders = _run([path, "-hide_banner", "-encoders"], timeout=20)
-    filter_names = {line.split()[1] for line in filters.splitlines() if re.match(r"^\s*[TSC.]{3}\s+\S+", line)}
+    # FFmpeg 8.1 prints two capability flags; older releases print three.
+    # Require an input/output signature so headings and legends are excluded.
+    filter_names = {
+        match.group(1)
+        for line in filters.splitlines()
+        if (match := re.match(r"^\s*[TSC.]{2,3}\s+(\S+)\s+[AVN|]+->[AVN|]+(?:\s|$)", line))
+    }
     encoder_names = {line.split()[1] for line in encoders.splitlines() if re.match(r"^\s*[VAS.][A-Z.]{5}\s+\S+", line)}
     return filter_names, encoder_names
 

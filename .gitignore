@@ -174,3 +174,6 @@ installer_files/
 logs/
 videolingo_*.log
 .tools/
+
+# Local Codex MCP launch paths
+/.codex/config.toml

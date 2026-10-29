@@ -124,6 +124,12 @@ uv run start.py --api
 See the **[HTTP API guide](docs/api.md)** for input, processing, progress, downloads,
 retries and serial batch processing. Interactive endpoint docs: [localhost:8000/docs](http://localhost:8000/docs).
 
+## Local MCP for Codex (macOS / Linux)
+
+The independent [MCP service](mcp/README.md) lets Codex transcribe local videos with faster-whisper, translate timestamped segments in the current conversation, and export Chinese or bilingual subtitles and subtitled MP4 files. It runs through stdio and keeps its dependencies and task data separate from the Streamlit application.
+
+See the [MCP setup and usage guide](mcp/README.md) for installation, project-level Codex configuration, model downloads, and the complete tool workflow. No separate translation API key is required.
+
 ## LLM, ASR and TTS providers
 VideoLingo supports OpenAI-Like API format and various TTS interfaces:
 - LLM: choose an OpenAI-compatible Chat Completions provider and model that can return the structured JSON required by the workflow. [OpenLux](https://www.openlux.ai/register?aff=wKYu) is recommended; set the API URL to `https://api.openlux.ai/v1`. Prefer GPT-6 Luna with model ID `gpt-6-luna` for best value, GPT-6 Sol with `gpt-6-sol` for better quality, or Claude Opus 5.5 with `claude-opus-5-5` for best quality. OpenLux relay rates are in the install docs. Configure the API URL, key and model in the sidebar.
